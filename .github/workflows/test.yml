@@ -1,0 +1,55 @@
+name: CI Pipeline
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test (Node ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ['20', '22']
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install dependencies
+        if: ${{ hashFiles('package.json', 'package-lock.json', 'npm-shrinkwrap.json', 'yarn.lock', 'pnpm-lock.yaml') != '' }}
+        run: npm ci
+        shell: bash
+
+      - name: Lint
+        if: ${{ hashFiles('package.json', 'package-lock.json', 'npm-shrinkwrap.json', 'yarn.lock', 'pnpm-lock.yaml') != '' && hashFiles('eslint.config.*', '.eslintrc*', 'package.json') != '' }}
+        run: npm run lint
+        shell: bash
+
+      - name: Build or type check
+        if: ${{ hashFiles('package.json', 'package-lock.json', 'npm-shrinkwrap.json', 'yarn.lock', 'pnpm-lock.yaml') != '' && hashFiles('tsconfig.json', 'tsconfig.*.json', 'package.json') != '' }}
+        run: npm run type-check
+        shell: bash
+
+      - name: Test
+        if: ${{ hashFiles('package.json', 'package-lock.json', 'npm-shrinkwrap.json', 'yarn.lock', 'pnpm-lock.yaml') != '' && hashFiles('package.json') != '' && (hashFiles('src/**/*.ts', 'src/**/*.tsx', 'test/**/*.ts', 'tests/**/*.ts', '**/*.test.ts', '**/*.spec.ts') != '' || contains(fromJSON('"\"test\"\"') , '') == false ) }}
+        run: npm test
+        shell: bash
+
+      - name: Summary
+        if: always()
+        run: echo "Node ${{ matrix.node-version }}: ${{ job.status }}" >> "$GITHUB_STEP_SUMMARY"
+        shell: bash
